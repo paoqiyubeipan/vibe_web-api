@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.coverage
+htmlcov/
+# This directory may contain the user's signed-in Mistral browser profile.
+profile/
+.env
+
+.ruff_cache/
+# Generated local test artifacts can include screenshots, session state, and debug data.
+/test-artifacts/

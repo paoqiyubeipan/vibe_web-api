@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vibe Work Fixture</title>
+    <style>
+      body { font-family: sans-serif; margin: 0; display: flex; }
+      #sidebar { width: 220px; padding: 12px; border-right: 1px solid #ddd; }
+      #sidebar button { display: block; width: 100%; margin-bottom: 6px; }
+      main { flex: 1; padding: 24px; }
+      #composer-card { border: 1px solid #ccc; padding: 12px; max-width: 720px; }
+      #chips span { margin-right: 8px; font-size: 12px; }
+      [contenteditable] { min-height: 24px; outline: none; }
+      #messages > div { border-top: 1px solid #eee; padding: 12px 0; }
+      [role="dialog"] { border: 1px solid #bbb; padding: 12px; margin-top: 8px; width: 240px; }
+    </style>
+  </head>
+  <body>
+    <div id="sidebar">
+      <button type="button" id="new-chat" aria-label="Create a new chat"><span aria-hidden="true">+</span></button>
+      <button type="button" id="mode-fast" aria-pressed="true">Fast</button>
+      <button type="button" id="mode-think" aria-pressed="false">Think</button>
+    </div>
+    <main>
+      <div id="messages"></div>
+      <div id="composer-card" class="flex click-focus-input">
+        <div id="chips"></div>
+        <div class="scrollbar-subtle">
+          <div contenteditable="true" data-placeholder="Type / for quick access"><p><br /></p></div>
+        </div>
+        <div class="chat-input-row">
+          <button type="button" aria-label="Open settings menu" aria-haspopup="dialog" id="settings">+</button>
+          <button type="button" id="send">Send</button>
+        </div>
+        <div role="dialog" id="dialog" hidden>
+          <button type="button" id="upload">Upload Files</button>
+          <input
+            type="file"
+            id="file"
+            multiple
+            accept="image/png,image/jpeg,image/webp,application/pdf,text/plain,.txt,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            hidden
+          />
+        </div>
+      </div>
+    </main>
+    <script>
+      const messages = document.getElementById('messages');
+      const chips = document.getElementById('chips');
+      const fileInput = document.getElementById('file');
+      const dialog = document.getElementById('dialog');
+      const composer = document.querySelector('[contenteditable="true"][data-placeholder]');
+      // Documents are read locally so the reply can prove the text made the trip.
+      const pendingDocs = [];
+      let conversationNumber = 0;
+
+      document.getElementById('settings').addEventListener('click', () => {
+        dialog.hidden = !dialog.hidden;
+      });
+      document.getElementById('upload').addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', () => {
+        const files = Array.from(fileInput.files || []);
+        if (!files.length) return;
+        // Simulate Work uploading: the chip and a small preview appear shortly after.
+        setTimeout(() => {
+          files.forEach((file) => {
+            const chip = document.createElement('span');
+            chip.textContent = file.name;
+            chips.appendChild(chip);
+            if (file.type.startsWith('image/')) {
+              const preview = document.createElement('img');
+              preview.width = 40;
+              preview.height = 40;
+              preview.src = URL.createObjectURL(file);
+              chips.appendChild(preview);
+            } else {
+              const doc = document.createElement('span');
+              doc.className = 'doc-chip';
+              doc.textContent = 'document';
+              chips.appendChild(doc);
+              const reader = new FileReader();
+              reader.onload = () => {
+                pendingDocs.push({
+                  name: file.name,
+                  size: file.size,
+                  text: String(reader.result || ''),
+                });
+              };
+              reader.readAsText(file);
+            }
+          });
+          fileInput.value = '';
+        }, 300);
+      });
+
+      function setMode(mode) {
+        document.getElementById('mode-fast').setAttribute('aria-pressed', String(mode === 'fast'));
+        document.getElementById('mode-think').setAttribute('aria-pressed', String(mode === 'think'));
+      }
+      document.getElementById('mode-fast').addEventListener('click', () => setMode('fast'));
+      document.getElementById('mode-think').addEventListener('click', () => setMode('think'));
+
+      document.getElementById('new-chat').addEventListener('click', () => {
+        conversationNumber += 1;
+        history.pushState({}, '', '/work/fixture-' + conversationNumber);
+        messages.innerHTML = '';
+        composer.innerHTML = '<p><br /></p>';
+        chips.innerHTML = '';
+        pendingDocs.length = 0;
+      });
+
+      function makePngDataUrl() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const context = canvas.getContext('2d');
+        const gradient = context.createLinearGradient(0, 0, 512, 512);
+        gradient.addColorStop(0, '#1d4ed8');
+        gradient.addColorStop(1, '#f97316');
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 512, 512);
+        context.fillStyle = '#fff';
+        context.font = '48px sans-serif';
+        context.fillText('generated', 100, 260);
+        return canvas.toDataURL('image/png');
+      }
+
+      document.getElementById('send').addEventListener('click', () => {
+        const prompt = composer.innerText.trim();
+        if (!prompt) return;
+        const user = document.createElement('div');
+        user.setAttribute('data-message-author-role', 'user');
+        user.textContent = prompt;
+        messages.appendChild(user);
+        composer.innerHTML = '<p><br /></p>';
+        chips.innerHTML = '';
+
+        setTimeout(() => {
+          const assistant = document.createElement('div');
+          assistant.setAttribute('data-message-author-role', 'assistant');
+          const wantsImage = /image|draw|picture|图|画/i.test(prompt);
+          if (wantsImage) {
+            const image = document.createElement('img');
+            image.src = makePngDataUrl();
+            image.alt = 'generated image';
+            assistant.appendChild(image);
+            const caption = document.createElement('p');
+            caption.textContent = 'Here is your image.';
+            assistant.appendChild(caption);
+          } else {
+            if (pendingDocs.length) {
+              const doc = pendingDocs[0];
+              const text = doc.text.trim().slice(0, 120);
+              assistant.textContent =
+                'Fixture read back ' + doc.name + ' (' + doc.size + ' bytes)' +
+                (text ? ': ' + text : '.');
+            } else {
+              assistant.textContent = 'Fixture reply: ' + prompt.slice(0, 40);
+            }
+          }
+          messages.appendChild(assistant);
+          pendingDocs.length = 0;
+        }, 600);
+      });
+    </script>
+  </body>
+</html>
